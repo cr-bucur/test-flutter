@@ -1,117 +1,106 @@
+import 'package:async/async.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_mobx/flutter_mobx.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:mighty_news/AppLocalizations.dart';
+import 'package:mighty_news/AppTheme.dart';
+import 'package:mighty_news/models/FontSizeModel.dart';
+import 'package:mighty_news/screens/SplashScreen.dart';
+import 'package:mighty_news/store/AppStore.dart';
+import 'package:mighty_news/utils/Constants.dart';
+import 'package:nb_utils/nb_utils.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
-void main() {
+import 'models/LanguageModel.dart';
+import 'models/WeatherResponse.dart';
+
+AppStore appStore = AppStore();
+
+int mAdShowCount = 0;
+
+Language? language;
+List<Language> languages = Language.getLanguages();
+
+FontSizeModel? fontSize;
+List<FontSizeModel> fontSizes = FontSizeModel.fontSizes();
+
+Language? ttsLang;
+List<Language> ttsLanguage = Language.getLanguagesForTTS();
+
+var weatherMemoizer = AsyncMemoizer<WeatherResponse>();
+
+RemoteConfig? remoteConfig;
+int retryCount = 0;
+
+AppLocalizations? appLocale;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  defaultRadius = 10;
+  defaultAppButtonRadius = 30;
+  defaultBlurRadius = 4.0;
+
+  await initialize(defaultDialogBorderRadius: 10);
+
+  appStore.setLanguage(getStringAsync(LANGUAGE, defaultValue: defaultLanguage));
+  appStore.setNotification(getBoolAsync(IS_NOTIFICATION_ON, defaultValue: true));
+  appStore.setTTSLanguage(getStringAsync(TEXT_TO_SPEECH_LANG, defaultValue: defaultTTSLanguage));
+
+  ///Uncomment below line if you want to skip https certificate
+  //HttpOverrides.global = HttpOverridesSkipCertificate();
+
+  int themeModeIndex = getIntAsync(THEME_MODE_INDEX);
+  if (themeModeIndex == ThemeModeLight) {
+    appStore.setDarkMode(false);
+  } else if (themeModeIndex == ThemeModeDark) {
+    appStore.setDarkMode(true);
+  }
+
+  fontSize = fontSizes.firstWhere((element) => element.fontSize == getIntAsync(FONT_SIZE_PREF, defaultValue: 16));
+  ttsLang = ttsLanguage.firstWhere((element) => element.fullLanguageCode == getStringAsync(TEXT_TO_SPEECH_LANG, defaultValue: defaultTTSLanguage));
+
+  if (isMobile) {
+    await Firebase.initializeApp().then((value) {
+      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+      MobileAds.instance.initialize();
+    });
+
+    await OneSignal.shared.setAppId(mOneSignalAPPKey);
+    OneSignal.shared.consentGranted(true);
+    OneSignal.shared.promptUserForPushNotificationPermission();
+
+    // OneSignal.shared.setInFocusDisplayType(OSNotificationDisplayType.notification);
+  }
+
+  setOrientationPortrait();
+
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
+    return Observer(
+      builder: (_) => MaterialApp(
+        navigatorKey: navigatorKey,
+        title: mAppName,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: appStore.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+        supportedLocales: Language.languagesLocale(),
+        localizationsDelegates: [AppLocalizations.delegate, GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate],
+        localeResolutionCallback: (locale, supportedLocales) => locale,
+        locale: Locale(appStore.selectedLanguageCode),
+        home: SplashScreen(),
+        scrollBehavior: SBehavior(),
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page text'),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-<<<<<<< HEAD
-              'You have pushed the button this many times:--_---_-----_-_!!*+',
-=======
-              'You have pushed the button this many times:--_---_-----_-_!*branch2',
->>>>>>> 362d00ba259ec72da723c53546e533b227b42161
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }

@@ -1,6 +1,6 @@
-# flutter_application_3
+# mighty_news
 
-A new Flutter project.
+A new Flutter application.
 
 ## Getting Started
 
